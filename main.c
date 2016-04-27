@@ -80,15 +80,6 @@ int main()
     }
     printf("\n");printf("\n");
 
-
-
-
-
-
-
-
-
-
     return 0;
 }
 void InvShiftRows(uint8_t abc[3][3]){
@@ -109,9 +100,6 @@ void InvShiftRows(uint8_t abc[3][3]){
     abc[2][2] = abc[2][0];
     abc[2][0] = temp;
 
-
-
-
 }
 void InvertSubBytes(uint8_t rsboxIndex[]){
     uint8_t b[8], c[8];
@@ -125,8 +113,6 @@ void InvertSubBytes(uint8_t rsboxIndex[]){
     for(i=0;i<8;i++){
         rsboxIndex[i] =rsbox[( (((int)b[i])*0x10 )+ (int)c[i])];
     }
-
-
 
 }
 void getSubBytes(uint8_t charArray[8]){
@@ -145,24 +131,24 @@ void getSubBytes(uint8_t charArray[8]){
     }
 
 }
-void swapBytes(uint8_t asd[8]){
+void swapBytes(uint8_t input[8]){
     uint8_t temp;
 
-    temp   = asd[0];
-    asd[0] = asd[4];
-    asd[4] = temp;
+    temp     = input[0];
+    input[0] = input[4];
+    input[4] = temp;
 
-    temp   = asd[1];
-    asd[1] = asd[5];
-    asd[5] = temp;
+    temp     = input[1];
+    input[1] = input[5];
+    input[5] = temp;
 
-    temp   = asd[2];
-    asd[2] = asd[6];
-    asd[6] = temp;
+    temp     = input[2];
+    input[2] = input[6];
+    input[6] = temp;
 
-    temp   = asd[3];
-    asd[3] = asd[7];
-    asd[7] = temp;
+    temp     = input[3];
+    input[3] = input[7];
+    input[7] = temp;
 
 }
 void shiftRows(uint8_t abc[3][3]){
