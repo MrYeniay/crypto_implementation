@@ -1,10 +1,54 @@
+/*************************************************************************
+Single mode encryption program, written by A.Arıcıoğlu and M.Yeniay
+///////////////////////////////////////////////////////////////////////////
+Number of rounds : 8
+Block size : 8
+Padding character: 'x'
+
+
+**************************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
 
-void getSubBytes(uint8_t[]);
-void InvertSubBytes(uint8_t[]);
-uint8_t state[3][3];
+void getSubBytes();
+void InvertSubBytes();
+void stateFunc();
+
+static uint8_t xtime(uint8_t);
+static uint8_t Multp(uint8_t, uint8_t);
+static void mixColumns(void);
+static void InvMixColumns(void);
+static void InvShiftColumn(void);
+static void ShiftColumn(void);
+
+static uint8_t xtime(uint8_t x);
+
+static uint8_t getSBoxValue(uint8_t);
+static uint8_t getSBoxInvert(uint8_t);
+
+static void KeyExpansion(void);
+static void addRoundKey(uint8_t);
+
+static void Cipher(void);
+static void InvCipher(void);
+
+void padding(uint8_t inText[8]);
+
+uint8_t inTextPadd[16];
+uint8_t state[4][4];
+
+uint8_t sboxIndex[16];
+
+static uint8_t roundKey[176];
+//default key
+uint8_t Key[16] = { (uint8_t) 0x61, (uint8_t) 0x7e, (uint8_t) 0x15, (uint8_t) 0x16,
+                    (uint8_t) 0x61, (uint8_t) 0xae, (uint8_t) 0xd2, (uint8_t) 0xa6,
+                    (uint8_t) 0xab, (uint8_t) 0xf7, (uint8_t) 0x15, (uint8_t) 0x88,
+                    (uint8_t) 0x09, (uint8_t) 0xcf, (uint8_t) 0x4f, (uint8_t) 0x3c };
+
 
 static const uint8_t sbox[256] =   {
         //0     1    2      3     4    5     6     7      8    9     A      B    C     D     E     F
@@ -45,139 +89,447 @@ static const uint8_t rsbox[256] =
 /* E */ 0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61,
 /* F */ 0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d };
 
-uint8_t sboxIndex[8];
+static const uint8_t Rcon[255] = {
+//        0     1    2      3     4    5     6     7      8    9     A      B    C     D     E     F
+/* 0 */  0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a,
+/* 1 */  0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39,
+/* 2 */  0x72, 0xe4, 0xd3, 0xbd, 0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a,
+/* 3 */  0x74, 0xe8, 0xcb, 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8,
+/* 4 */  0xab, 0x4d, 0x9a, 0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef,
+/* 5 */  0xc5, 0x91, 0x39, 0x72, 0xe4, 0xd3, 0xbd, 0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc,
+/* 6 */  0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb, 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b,
+/* 7 */  0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3,
+/* 8 */  0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39, 0x72, 0xe4, 0xd3, 0xbd, 0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94,
+/* 9 */  0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb, 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20,
+/* A */  0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f, 0x5e, 0xbc, 0x63, 0xc6, 0x97, 0x35,
+/* B */  0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39, 0x72, 0xe4, 0xd3, 0xbd, 0x61, 0xc2, 0x9f,
+/* C */  0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb, 0x8d, 0x01, 0x02, 0x04,
+/* D */  0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f, 0x5e, 0xbc, 0x63,
+/* E */  0xc6, 0x97, 0x35, 0x6a, 0xd4, 0xb3, 0x7d, 0xfa, 0xef, 0xc5, 0x91, 0x39, 0x72, 0xe4, 0xd3, 0xbd,
+/* F */  0x61, 0xc2, 0x9f, 0x25, 0x4a, 0x94, 0x33, 0x66, 0xcc, 0x83, 0x1d, 0x3a, 0x74, 0xe8, 0xcb  };
+int main(int argc, char * * argv) {
+    // uint8_t a[8] = {0x61, 0x79, 0x6b, 0x6b, 0x74, 0x72, 0x65, 0x77 };
+    uint8_t buff[8];
+    int i, j, m = 0, opt;
 
-int main()
-{
-    uint8_t a[8]={ 0x61,0x79,0x6b,0x6b,0x74,0x72,0x65,0x77};
-    int i,j;
+    FILE * fp, * fp1, * log;
+    //TODO logları kaydetmek için log.dat
+    log = fopen("log.dat", "a");
+    //Option belirteçleri
+    //e for Encryption
+    //d for Decryption
+    while ((opt = getopt(argc, argv, "e:d:")) != -1)
+        switch (opt) {
+        case 'e':
+            fp = fopen(optarg, "r");
+            if (fp == NULL) {
+                printf("Dosya1 açılamadı. Dosya yolunu ve erişim izinlerini kontrol edin.\n");
+                break;
+            } else {
+                //Dosya boyutunu al
+                fseek(fp, 0L, SEEK_END);
+                int sz = ftell(fp) - 1;
+                printf("%d\n\n", sz);
+                rewind(fp);
+                //Pointerı başa çek
 
-    getSubBytes(a);
-    for(i=0;i<8;i++){
-        printf("%x \n", sboxIndex[i]);
-    }
+                //TODO program her çalıştığında 3. argümanı "ekleme" modunda açmadan önce boşalttır. Eski veriler gitsin.
+                fp1 = fopen(argv[3], "a");
+                if (fp1 == NULL) {
+                    printf("Dosya2 açılamadı. Dosya yolunu ve erişim izinlerini kontrol edin.\n");
+                    break;
+                } else {
+                    printf("Dosya açıldı.");
+                    while (m < (sz / 8)) {
+                        m++;
+                        fgets(buff, 9, fp);
+                        KeyExpansion();
+                        padding(buff);
+                        stateFunc();
+
+                        Cipher();
+
+                        for (i = 0; i < 4; i++) {
+                            for (j = 0; j < 4; j++) {
+                                printf("!>%c<! ", state[i][j]);
+
+                                fprintf(fp1, "%c", state[i][j]);
+                                //fputs(state[i][j], fp1);
+                            }
+                        }
+                    }
+                    fgets(buff, (sz % 8) + 1, fp);
+                    for (m = ((sz % 8)); m < 8; m++)
+                        buff[m] = 'x';
+
+                    KeyExpansion();
+                    padding(buff);
+                    stateFunc();
+
+                    Cipher();
+
+                    for (i = 0; i < 4; i++) {
+                        for (j = 0; j < 4; j++) {
+                            printf("!>%c<! ", state[i][j]);
+
+                            fprintf(fp1, "%c", state[i][j]);
+                            //fputs(state[i][j], fp1);
+                        }
+                    }
+
+                }
+            }
+            fclose(fp);
+            fclose(fp1);
+            break;
+        case 'd':
+            fp1 = fopen(optarg, "r");
+            //dosya boyutunu al
+            fseek(fp1, 0L, SEEK_END);
+            int sz = ftell(fp1) - 1;
+            rewind(fp1);
+            printf("%d\n\n", sz);
+            //pointerı başa at.
+
+            fp = fopen(argv[3], "a");
+
+            while (m < ((sz / 16) + 1)) {
+                m++;
+                //TODO aldığımız değerle intextpaddi doldurup state func çağılırmalı
+                fgets(inTextPadd, 17, fp1);
+                for (i = 0; i < 16; i++) {
+                    printf("%x  ", inTextPadd[i]);
+                }
+                printf("\n");
+                printf("\n");
+                for (i = 0; i < 16; i++) {
+                    printf("%x  ", inTextPadd[i]);
+                }
+                printf("\n");
+                KeyExpansion();
+                stateFunc();
+                InvCipher();
+                //TODO şifrelenmiş karakterin 'x' olma ihtimali ile oluşan yanlış filtrelemeyi düzelt.
+                for (i = 0; i < 4; i++) {
+                    for (j = 0; j < 4; j++) {
+                        //printf("!%c! ", state[i][j]);
+                        if (state[i][j] != 'x')
+                            fprintf(fp, "%c", state[i][j]);
+                    }
+
+                }
+
+            }
+            fclose(fp1);
+            break;
+        default:
+            printf("Invalid option.\n");
+        }
+
     printf("\n\n\n");
-
-    swapBytes(sboxIndex);
-    for(i=0;i<8;i++){
-        printf("%x \n", sboxIndex[i]);
-    }
-    printf("\n\n\n");
-
-    stateFunc(sboxIndex);
-    for(i=0;i<3;i++){
-    for(j=0;j<3;j++)
-    printf("!%x!  ", state[i][j]);
-    printf("\n");
-    }
-    printf("\n");printf("\n");
-
-    shiftRows(state);
-    for(i=0;i<3;i++){
-    for(j=0;j<3;j++)
-    printf("!%x!  ", state[i][j]);
-    printf("\n");
-    }
-    printf("\n");printf("\n");
 
     return 0;
 }
-void InvShiftRows(uint8_t abc[3][3]){
 
-    int i,j;
-    uint8_t temp;
-
-
-    /////2.satır için
-    temp = abc[1][2];
-    abc[1][2] = abc[1][1];
-    abc[1][1] = abc[1][0];
-    abc[1][0] = temp;
-
-    /////3. satır için
-    temp = abc[2][1];
-    abc[2][1] = abc[2][2];
-    abc[2][2] = abc[2][0];
-    abc[2][0] = temp;
-
-}
-void InvertSubBytes(uint8_t rsboxIndex[]){
-    uint8_t b[8], c[8];
+void padding(uint8_t inText[8]) {
     int i;
-
-   for(i=0;i<8;i++){
-        b[i] = (rsboxIndex[i] >> 4);
-        c[i] = (rsboxIndex[i] & 0x0F);
-
-    }
-    for(i=0;i<8;i++){
-        rsboxIndex[i] =rsbox[( (((int)b[i])*0x10 )+ (int)c[i])];
+    for (i = 0; i < 8; i++) {
+        inTextPadd[i] = inText[i];
+        inTextPadd[i + 8] = 0x78;
     }
 
 }
-void getSubBytes(uint8_t charArray[8]){
 
-    uint8_t b[8],c[8];
+static uint8_t getSBoxValue(uint8_t num) {
+    return sbox[num];
+}
+
+static uint8_t getSBoxInvert(uint8_t num) {
+    return rsbox[num];
+}
+
+void getSubBytes(void) {
+
+    uint8_t i, j;
+    for (i = 0; i < 4; ++i) {
+        for (j = 0; j < 4; ++j) {
+            state[j][i] = getSBoxValue((state)[j][i]);
+        }
+    }
+
+}
+
+void InvertSubBytes(void) {
+
+    uint8_t i, j;
+    for (i = 0; i < 4; ++i) {
+        for (j = 0; j < 4; ++j) {
+            state[j][i] = getSBoxInvert((state)[j][i]);
+        }
+    }
+}
+
+void swapBytes(uint8_t inSwap[16]) {
+    uint8_t temp;
     int i;
-
-    for(i=0;i<8;i++){
-        b[i] = (charArray[i] >> 4);
-        c[i] = (charArray[i] & 0x0F);
-
-    }
-
-    for(i=0;i<8;i++){
-        sboxIndex[i] =sbox[( (((int)b[i])*0x10 )+ (int)c[i])];
+    for (i = 0; i < 16; i++) {
+        temp = inSwap[i];
+        inSwap[i] = inSwap[i + 8];
+        inSwap[i + 8] = temp;
     }
 
 }
-void swapBytes(uint8_t input[8]){
-    uint8_t temp;
 
-    temp     = input[0];
-    input[0] = input[4];
-    input[4] = temp;
+void stateFunc() {
+    int i, j, k = 0;
 
-    temp     = input[1];
-    input[1] = input[5];
-    input[5] = temp;
+    for (i = 0; i < 4; i++) {
+        for (j = 0; j < 4; j++) {
 
-    temp     = input[2];
-    input[2] = input[6];
-    input[6] = temp;
-
-    temp     = input[3];
-    input[3] = input[7];
-    input[7] = temp;
-
-}
-void shiftRows(uint8_t abc[3][3]){
-
-    int i,j;
-    uint8_t temp;
-    temp = abc[1][0];
-    abc[1][0] = abc[1][1];
-    abc[1][1] = abc[1][2];
-    abc[1][2] = temp;
-
-    temp = abc[2][0];
-    abc[2][0] = abc[2][2];
-    abc[2][2] = abc[2][1];
-    abc[2][1] = temp;
-
-
- }
-void stateFunc(uint8_t raw_input[8]){
-    int i,j,k=0;
-
-    for(i=0;i<3;i++){
-        for(j=0;j<3;j++){
-            state[j][i] = raw_input[k];
+            state[i][j] = inTextPadd[k];
             k++;
+
+        }
+    }
+}
+
+void shiftRows() {
+    uint8_t temp;
+    // 2. satır sol 1 kere
+    temp = state[1][0];
+    state[1][0] = state[1][1];
+    state[1][1] = state[1][2];
+    state[1][2] = state[1][3];
+    state[1][3] = temp;
+
+    // 3. satır sol 2 kere
+    temp = state[2][0];
+    state[2][0] = state[2][2];
+    state[2][2] = temp;
+
+    temp = state[2][1];
+    state[2][1] = state[2][3];
+    state[2][3] = temp;
+
+    // 4. satır sol 3 kere
+    temp = state[3][0];
+    state[3][0] = state[3][3];
+    state[3][3] = state[3][2];
+    state[3][2] = state[3][1];
+    state[3][1] = temp;
+}
+
+void InvShiftRows() {
+    uint8_t temp;
+
+    // 2. satır sağ 1 kere
+    temp = state[1][3];
+    state[1][3] = state[1][2];
+    state[1][2] = state[1][1];
+    state[1][1] = state[1][0];
+    state[1][0] = temp;
+
+    // 3. satır sağ 2 kere
+    temp = state[2][0];
+    state[2][0] = state[2][2];
+    state[2][2] = temp;
+    state[2][2] = temp;
+
+    temp = state[2][1];
+    state[2][1] = state[2][3];
+    state[2][3] = temp;
+
+    // 4. satır sağ 3 kere
+    temp = state[3][0];
+    state[3][0] = state[3][1];
+    state[3][1] = state[3][2];
+    state[3][2] = state[3][3];
+    state[3][3] = temp;
+}
+
+static void InvShiftColumn(void) {
+    uint8_t temp;
+    //2. kolon 1 aşağı
+    temp = state[3][1];
+    state[3][1] = state[2][1];
+    state[2][1] = state[1][1];
+    state[1][1] = state[0][1];
+    state[0][1] = temp;
+    //3. kolon 2 aşağı
+    temp = state[0][2];
+    state[0][2] = state[2][2];
+    state[2][2] = temp;
+
+    temp = state[1][2];
+    state[1][2] = state[3][2];
+    state[3][2] = temp;
+    //4. kolon 3 aşağı
+    temp = state[0][3];
+    state[0][3] = state[1][3];
+    state[1][3] = state[2][3];
+    state[2][3] = state[3][3];
+    state[3][3] = temp;
+}
+
+static void ShiftColumn(void) {
+    uint8_t temp;
+    //2. kolon 1 yukarı
+    temp = state[0][1];
+    state[0][1] = state[1][1];
+    state[1][1] = state[2][1];
+    state[2][1] = state[3][1];
+    state[3][1] = temp;
+    //3. kolon 2 yukarı
+    temp = state[0][2];
+    state[0][2] = state[2][2];
+    state[2][2] = temp;
+
+    temp = state[1][2];
+    state[1][2] = state[3][2];
+    state[3][2] = temp;
+    //4. kolon 3 yukarı
+    temp = state[0][3];
+    state[0][3] = state[3][3];
+    state[3][3] = state[2][3];
+    state[2][3] = state[1][3];
+    state[1][3] = temp;
+}
+
+static uint8_t xtime(uint8_t x) {
+    return ((x << 1) ^ (((x >> 7) & 1) * 0x1b));
+}
+static uint8_t Multp(uint8_t x, uint8_t y) {
+    return (((y & 1) * x) ^
+        ((y >> 1 & 1) * xtime(x)) ^
+        ((y >> 2 & 1) * xtime(xtime(x))) ^
+        ((y >> 3 & 1) * xtime(xtime(xtime(x)))) ^
+        ((y >> 4 & 1) * xtime(xtime(xtime(xtime(x))))));
+}
+
+static void mixColumns(void) {
+    int i;
+    uint8_t a, b, c, d;
+    for (i = 0; i < 4; ++i) {
+        a = state[i][0];
+        b = state[i][1];
+        c = state[i][2];
+        d = state[i][3];
+        //mixcolumn yapılacak matrisle çarpılır.
+        state[i][0] = Multp(a, 0x02) ^ Multp(b, 0x03) ^ Multp(c, 0x01) ^ Multp(d, 0x01);
+        state[i][1] = Multp(a, 0x01) ^ Multp(b, 0x02) ^ Multp(c, 0x03) ^ Multp(d, 0x01);
+        state[i][2] = Multp(a, 0x01) ^ Multp(b, 0x01) ^ Multp(c, 0x02) ^ Multp(d, 0x03);
+        state[i][3] = Multp(a, 0x03) ^ Multp(b, 0x01) ^ Multp(c, 0x01) ^ Multp(d, 0x02);
+    }
+}
+
+static void InvMixColumns(void) {
+    int i;
+    uint8_t a, b, c, d;
+    for (i = 0; i < 4; ++i) {
+        a = state[i][0];
+        b = state[i][1];
+        c = state[i][2];
+        d = state[i][3];
+        //invmixcolumn yapılacak matrisle çarpılır.
+        state[i][0] = Multp(a, 0x0e) ^ Multp(b, 0x0b) ^ Multp(c, 0x0d) ^ Multp(d, 0x09);
+        state[i][1] = Multp(a, 0x09) ^ Multp(b, 0x0e) ^ Multp(c, 0x0b) ^ Multp(d, 0x0d);
+        state[i][2] = Multp(a, 0x0d) ^ Multp(b, 0x09) ^ Multp(c, 0x0e) ^ Multp(d, 0x0b);
+        state[i][3] = Multp(a, 0x0b) ^ Multp(b, 0x0d) ^ Multp(c, 0x09) ^ Multp(d, 0x0e);
+    }
+}
+
+static void KeyExpansion(void) {
+    uint32_t i, j, k;
+    uint8_t temp[4];
+
+    // ilk round key kendisi
+    for (i = 0; i < 4; ++i) {
+        roundKey[(i * 4) + 0] = Key[(i * 4) + 0];
+        roundKey[(i * 4) + 1] = Key[(i * 4) + 1];
+        roundKey[(i * 4) + 2] = Key[(i * 4) + 2];
+        roundKey[(i * 4) + 3] = Key[(i * 4) + 3];
+    }
+
+    for (; i < 36; ++i) {
+        for (j = 0; j < 4; ++j) {
+            temp[j] = roundKey[(i - 1) * 4 + j];
+        }
+
+        if (i % 4 == 0) // satır satır almak için
+        {
+
+            // rotWord
+            k = temp[0];
+            temp[0] = temp[1];
+            temp[1] = temp[2];
+            temp[2] = temp[3];
+            temp[3] = k;
+
+            //subword
+            temp[0] = getSBoxValue(temp[0]);
+            temp[1] = getSBoxValue(temp[1]);
+            temp[2] = getSBoxValue(temp[2]);
+            temp[3] = getSBoxValue(temp[3]);
+
+            temp[0] = temp[0] ^ Rcon[i / 4];
         }
 
     }
-    state[2][2] = 0x78;
+}
 
+static void addRoundKey(uint8_t round) {
+    uint8_t i, j;
 
+    for (i = 0; i < 4; ++i) {
+        for (j = 0; j < 4; ++j) {
+            state[i][j] ^= roundKey[round * 16 + i * 4 + j]; //her roundda 16 karakter işlediği için
+        }
+    }
+}
+
+static void Cipher(void) {
+    uint8_t round = 0;
+
+    // Roundlar başlamadan önce ilk keyi state e yerleştir.
+    addRoundKey(0);
+
+    //7 round
+    for (round = 1; round < 8; ++round) {
+
+        getSubBytes();
+        ShiftColumn();
+        shiftRows();
+        mixColumns();
+        addRoundKey(round);
+    }
+
+    // son round mixcolumn yok.
+
+    getSubBytes();
+    ShiftColumn();
+    shiftRows();
+    addRoundKey(8);
+}
+
+static void InvCipher(void) {
+    uint8_t round = 0;
+
+    // Roundlar başlamadan önce ilk keyi state e yerleştir.
+    addRoundKey(8);
+
+    // 7 round geriden
+
+    for (round = 7; round > 0; round--) {
+        InvShiftRows();
+        InvShiftColumn();
+        InvertSubBytes();
+        addRoundKey(4);
+        InvMixColumns();
+    }
+
+    // son round mixcolumn yok.
+    InvShiftRows();
+    InvShiftColumn();
+    InvertSubBytes();
+    addRoundKey(0);
 }
